@@ -1,0 +1,18 @@
+def getGroups(user_id_list, api):
+
+    user_id_arr = '[%s]'%(','.join(user_id_list))
+    print(user_id_arr)
+    code = '''var userids = %s;
+    var finarr = [];
+    var luids = 0;
+    while (luids != luids.length) {
+        var uid = userids[luids];
+        var uid_groups = API.groups.get({user_id:uid});
+        var id_groups = [uid, uid_groups];
+        finarr.push(id_groups);
+        luids = luids + 1;
+    };
+    return finarr;
+    '''%(user_id_arr)
+    groups = api.execute(code=code)
+    return groups
