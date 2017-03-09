@@ -113,10 +113,7 @@ def pairs(list_, exclude_doubles=True):
     return fin
 
 
-
-if __name__ == '__main__':
-    session = vk.Session(access_token='090f759f96a5275d93064832baa22e672f271ec603ee3b0177d9c113caa58100fd2ed5a8981c60c564554')
-    api = vk.API(session, v='5.62', lang='ru', timeout=10)
+def getGroupsWithBackup(api, backup_file = 'groups.txt'):
     user_id_list = getIdList()
     user_id_set = set(user_id_list)
 
@@ -127,21 +124,23 @@ if __name__ == '__main__':
         allgroups += l
     allgroups_set = list(set(allgroups))
 
-    with open('groups.txt', 'w', encoding='utf8') as f:
+    with open(backup_file, 'w', encoding='utf8') as f:
         for i in allgroups_set:
             print(i, file=f)
 
+
+def getAllGroupsUsers(api, top = 10, groups_file = 'groups.txt', users_file = 'allusers.txt'):
     allgroups = open('groups.txt', 'r', encoding='utf8').read().split('\n')        
 
-    top = popularityTop(allgroups, top=10)
+    top = popularityTop(allgroups, top=top)
     print('top:')
     for i in top:
         print('\t%s'%i)
     try:
-        aufile = open('allusers.txt', 'a', encoding='utf8')
+        aufile = open(users_file, 'a', encoding='utf8')
         print('allusers.txt found, adding info')
     except:
-        aufile = open('allgroups.txt', 'w', encoding='utf8')
+        aufile = open(users_file, 'w', encoding='utf8')
         print('allusers.txt created, adding info')
 
     allusers = getUsersFromGroups([i[0] for i in top], api)
@@ -151,12 +150,15 @@ if __name__ == '__main__':
 
     aufile.close()
 
+
+def getAllIntersections(api, au_file = 'allusers.txt'):
     allusers = {}
-    aufile = open('allusers.txt', 'r', encoding='utf8')
+    aufile = open(au_file, 'r', encoding='utf8')
     for line in aufile:
         line = line.strip('\n')
         line = line.split('\t')
         allusers[line[0]] = eval(line[1])
+    aufile.close()
 
     print('usersFromFile collected')
 
@@ -184,4 +186,17 @@ if __name__ == '__main__':
         except Exception as e:
             pass
     resulttable.close()
+
+
+if __name__ == '__main__':
+    session = vk.Session(access_token='090f759f96a5275d93064832baa22e672f271ec603ee3b0177d9c113caa58100fd2ed5a8981c60c564554')
+    api = vk.API(session, v='5.62', lang='ru', timeout=10)
+
+    getGroupsWithBackup(api)
+    getAllGroupsUsers(api, top = 3)
+    getAllIntersections(api)
+
+    
+
+
         
