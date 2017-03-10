@@ -2,80 +2,123 @@
 # -*- coding: utf8 -*-
 
 import vk, time, sys, datetime
-import _pickle as pickle
 
 
-def getIdList(fname='positions_slice.txt'):
+def backupDict(dict_, fname):
+    with open(fname, 'w', encoding='utf8') as f:
+        for k in dict_.keys():
+            if dict_[k] != []:
+                for i in dict_[k]:
+                    f.write('%s\t%s\n'%(k, i))
+
+def restoreDict(fname):
+    fin = {}
+    with open(fname, 'r', encoding='utf8') as f:
+        for line in f:
+            line = line.strip('\n')
+            line = line.split('\t')
+            try:
+                fin[line[0]].append(line[1])
+            except:
+                fin[line[0]] = [line[1]]
+    return fin
+
+
+def getUserIdFromFile(fname='positions_slice.txt', set_=False):
+    # открывает файл fname
+    # возвращает список id пользователей вк из файла
     f = open(fname, 'r', encoding='utf8')
     ids = [line[3:][:-1] for line in f]
-    return list(set(ids))
+    ids_set = set(ids)
+    if set_:
+        print('returning SET of user ids')
+        return ids_set
+    else:
+        print('returning LIST of user ids')
+        return list(ids_set)
 
 
-def getGroups(user_id_list, api):
-    print('collecting groups...')
+def getGroups(user_id_list, api, bfile=''):
+    # возвращает словарь:
+    # ключи - id пользователя
+    # значения - список id групп, где состоит пользователь
+    print('collecting groups from %s users'%len(user_id_list))
     groups = {}
-    for i in user_id_list:
-        print(i)
+    for user_id in user_id_list:
+        print(user_id)
         try:
-            g = api.groups.get(user_id=i)
-            groups[i] = g['items']
+            g = api.groups.get(user_id=user_id)
+            groups[user_id] = g['items']
             print('successfully collected %s groups'%len(g['items']))
         except Exception as e:
             print(e)
-            groups[i] = [e]
+            groups[user_id] = []
         time.sleep(0.3333333333)
         print('')
     print('groups collected')
+    backupDict(groups, 'groups.txt')
     return groups
 
 
-def collectFromList(list_of_lists, exclude=[[]]):
+def collectFromList(list_of_lists):
+    ## берет на вход список списков
+    ## возвращает сумму этих списков
     result = []
     for i in list_of_lists:
-        if i not in exclude:
-            result += i
+        if type(i) == list:
+            result += collectFromList(i)
+        else:
+            result.append(i)
     return result
 
 
-def getAllUsersFromOneGroup(groupid, api):
+def getGroupUsers(groupid, api):
+    ## берет на вход id группы вк
+    ## возвращает список id пользователей этой группы
     members_gl = []
     offset = 0 
     g = api.groups.getMembers(group_id=int(groupid), offset=offset)['count']
     strt = datetime.datetime.now()
     est = datetime.timedelta(seconds = 0.3333333) * g/25000 * 11/5
     print(g)
-    print('estimated time: %s'%est)
-    if offset > g:
-        print('1 iteration')
-        code = open('getAllUsersFromOneGroup.vkcode', 'r', encoding='utf8').read()
-        code = code%(offset, groupid)
-        members = api.execute(code=code)
-        print(len(members))
+    if g == 0:
+        print('api method returned no users. perhaps group is blocked')
+        return []
     else:
-        print('several iterations')
-        while offset < g + 25000:
+        print('estimated time: %s'%est)
+        if offset > g:
+            print('1 iteration')
             code = open('getAllUsersFromOneGroup.vkcode', 'r', encoding='utf8').read()
             code = code%(offset, groupid)
-            returned = api.execute(code=code)
-            offset_ = returned[0]
-            members = returned[1]
-            members_gl += members
-            offset = offset_
-            time.sleep(0.3333333)
-            sys.stdout.write('\rcollected %s users out of %s'%(len(collectFromList(members_gl)), g))
-            sys.stdout.flush()
-    fnsh = datetime.datetime.now()
-    print('\nspent time: %s'%(fnsh-strt))
-    return collectFromList(members_gl)
+            members = api.execute(code=code)
+            print(len(members))
+        else:
+            print('several iterations')
+            while offset < g + 25000:
+                code = open('getAllUsersFromOneGroup.vkcode', 'r', encoding='utf8').read()
+                code = code%(offset, groupid)
+                returned = api.execute(code=code)
+                offset_ = returned[0]
+                members = returned[1]
+                members_gl += members
+                offset = offset_
+                time.sleep(0.3333333)
+                sys.stdout.write('\rcollected %s users out of %s'%(len(collectFromList(members_gl)), g))
+                sys.stdout.flush()
+        fnsh = datetime.datetime.now()
+        print('\nspent time: %s'%(fnsh-strt))
+        return collectFromList(members_gl)
 
 
-# даём на вход список id групп, на выходе - словарь вида {группа:[юзер1, ..., юзерN]}
 def getUsersFromGroups(groups_list, api):
+    groups_list = restoreDict('groups.txt')
+    # берет на вход список id групп вк
+    # возвращает словарь вида {id_группы:[id_юзера_1, ..., id_юзера_n]}
     people = {}
     for i in groups_list:
         print(i)
         try:
-            people[i] = getAllUsersFromOneGroup(i, api)
+            people[i] = getGroupUsers(i, api)
             print('\nsuccessfully collected %s members from %s'%(len(people[i]), i))
         except Exception as e:
             print(e)
@@ -83,22 +126,10 @@ def getUsersFromGroups(groups_list, api):
         time.sleep(0.3333333333)
         print('')
     print('users from groups collected')
+    for i in people:
+        print(i, len(people[i]))
+    backupDict(people, 'people.txt')
     return people
-
-
-def popularityTop(allgroups, top=10):
-    d = {}
-    for i in allgroups:
-        try:
-            d[i] += 1
-        except:
-            d[i] = 1
-    n = [[i,d[i]] for i in d]
-    n = sorted(n, key=lambda x: x[1], reverse=True)
-    if top != 0:
-        return n[:top]
-    else:
-        return n
 
 
 def pairs(list_, exclude_doubles=True):
@@ -106,97 +137,40 @@ def pairs(list_, exclude_doubles=True):
     for i in list_:
         for j in list_:
             if exclude_doubles:
-                if i != j:
+                if i != j and [j,i] not in fin:
                     fin.append([i,j])
             else:
                 fin.append([i,j])
     return fin
 
 
-def getGroupsWithBackup(api, backup_file = 'groups.txt'):
-    user_id_list = getIdList()
-    user_id_set = set(user_id_list)
+def intersections(people):
 
-    g = getGroups(user_id_list, api)
-    allgroups = []
+    pairs_ = pairs(people.keys())
+    user_id_set = getUserIdFromFile(set_=True)
 
-    for l in g.values():
-        allgroups += l
-    allgroups_set = list(set(allgroups))
-
-    with open(backup_file, 'w', encoding='utf8') as f:
-        for i in allgroups_set:
-            print(i, file=f)
-
-
-def getAllGroupsUsers(api, top = 10, groups_file = 'groups.txt', users_file = 'allusers.txt'):
-    allgroups = open('groups.txt', 'r', encoding='utf8').read().split('\n')        
-
-    top = popularityTop(allgroups, top=top)
-    print('top:')
-    for i in top:
-        print('\t%s'%i)
-    try:
-        aufile = open(users_file, 'a', encoding='utf8')
-        print('allusers.txt found, adding info')
-    except:
-        aufile = open(users_file, 'w', encoding='utf8')
-        print('allusers.txt created, adding info')
-
-    allusers = getUsersFromGroups([i[0] for i in top], api)
-
-    for i in allusers:
-        print('%s\t%s'%(i, allusers[i]), file=aufile)
-
-    aufile.close()
-
-
-def getAllIntersections(api, au_file = 'allusers.txt'):
-    allusers = {}
-    aufile = open(au_file, 'r', encoding='utf8')
-    for line in aufile:
-        line = line.strip('\n')
-        line = line.split('\t')
-        allusers[line[0]] = eval(line[1])
-    aufile.close()
-
-    print('usersFromFile collected')
-
-    group_pairs = pairs(allusers.keys())
-    print('pairs made')
-    resulttable = open('groups_distribution.csv', 'w', encoding='utf8')
-    for i in group_pairs:
-        print('working with pair %s * %s'%(i[0], i[1]))
-        try:
-            fst = i[0]
-            snd = i[1]
-
-            f_usrs = set(allusers[fst])
-            s_usrs = set(allusers[snd])
-
-            inters = f_usrs & s_usrs
-            # print(inters)
-            # print(len(list(inters)))
-            inters_with_aud = inters & user_id_set
-            in_aud = len(list(inters_with_aud))
-            # print(in_aud)
-            # print(len(user_id_list))
-            # print('%s * %s - %s percent (%s) from given audience'%(fst, snd, float(in_aud/len(user_id_list)), in_aud))
-            resulttable.write('%s*%s\t%s\t%s\n'%(fst, snd, float(in_aud/len(user_id_list)), in_aud))
-        except Exception as e:
-            pass
-    resulttable.close()
+    for p in pairs_:
+        f_g, s_g = p[0], p[1]
+        # print(f_g, s_g)
+        f_usrs, s_usrs = set(people[f_g]), set(people[s_g])
+        # print(f_usrs, s_usrs)
+        pair_intersection = f_usrs & s_usrs
+        print('%s * %s: %s people'%(f_g, s_g, len(list(pair_intersection))))
+        main_intersection = pair_intersection & user_id_set
+        print('%s * %s * main: %s people'%(f_g, s_g, len(list(main_intersection))))
+        
 
 
 if __name__ == '__main__':
+
     session = vk.Session(access_token='090f759f96a5275d93064832baa22e672f271ec603ee3b0177d9c113caa58100fd2ed5a8981c60c564554')
     api = vk.API(session, v='5.62', lang='ru', timeout=10)
 
-    getGroupsWithBackup(api)
-    getAllGroupsUsers(api, top = 3)
-    getAllIntersections(api)
-
+    # user_id_list = getUserIdFromFile()
+    groups = getGroups(user_id_list, api)
+    # groups = restoreDict('groups.txt')
+    people = getUsersFromGroups(groups, api)
+    # people = restoreDict('people.txt')
+    intersections(people)
     
 
-
-        
