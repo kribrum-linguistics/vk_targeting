@@ -10,9 +10,12 @@ def backupDict(dict_, fname):
             if dict_[k] != []:
                 for i in dict_[k]:
                     f.write('%s\t%s\n'%(k, i))
+        print('dict successfully backed up')
 
 def restoreDict(fname):
+    print('loading file with dict...')
     fin = {}
+    counter = 0
     with open(fname, 'r', encoding='utf8') as f:
         for line in f:
             line = line.strip('\n')
@@ -21,6 +24,10 @@ def restoreDict(fname):
                 fin[line[0]].append(line[1])
             except:
                 fin[line[0]] = [line[1]]
+            counter += 1
+            sys.stdout.write('\r%s lines processed'%counter)
+            sys.stdout.flush()
+        print('\ndict succsessfully restored with total of %s keys'%(len(fin.keys())))
     return fin
 
 
@@ -38,7 +45,7 @@ def getUserIdFromFile(fname='positions_slice.txt', set_=False):
         return list(ids_set)
 
 
-def getGroups(user_id_list, api, bfile=''):
+def getGroups(user_id_list, api):
     # возвращает словарь:
     # ключи - id пользователя
     # значения - список id групп, где состоит пользователь
@@ -60,6 +67,16 @@ def getGroups(user_id_list, api, bfile=''):
     return groups
 
 
+def getGroupsFromFile(fname = '919_должности_-_где_ца (1).txt'):
+    group_ids = []
+    with open(fname, 'r', encoding='utf8') as f:
+        for line in f:
+            line = line.strip('\n')
+            line = line.split('/')
+            group_ids.append(line[-1])
+    return group_ids
+
+
 def collectFromList(list_of_lists):
     ## берет на вход список списков
     ## возвращает сумму этих списков
@@ -77,7 +94,7 @@ def getGroupUsers(groupid, api):
     ## возвращает список id пользователей этой группы
     members_gl = []
     offset = 0 
-    g = api.groups.getMembers(group_id=int(groupid), offset=offset)['count']
+    g = api.groups.getMembers(group_id=groupid, offset=offset)['count']
     strt = datetime.datetime.now()
     est = datetime.timedelta(seconds = 0.3333333) * g/25000 * 11/5
     print(g)
@@ -111,7 +128,7 @@ def getGroupUsers(groupid, api):
 
 
 def getUsersFromGroups(groups_list, api):
-    groups_list = restoreDict('groups.txt')
+    # groups_list = restoreDict('groups.txt')
     # берет на вход список id групп вк
     # возвращает словарь вида {id_группы:[id_юзера_1, ..., id_юзера_n]}
     people = {}
@@ -144,33 +161,72 @@ def pairs(list_, exclude_doubles=True):
     return fin
 
 
-def intersections(people):
+def triplets(list_, exclude_doubles=True):
+    fin = []
+    for i in list_:
+        for j in list_:
+            for k in list_:
+                a = sorted([i,j,k])
+                if a not in fin and len(list(set(a))) == len(a):
+                    fin.append(a)
+    return fin
 
-    pairs_ = pairs(people.keys())
-    user_id_set = getUserIdFromFile(set_=True)
 
-    for p in pairs_:
-        f_g, s_g = p[0], p[1]
-        # print(f_g, s_g)
-        f_usrs, s_usrs = set(people[f_g]), set(people[s_g])
+def intersections(people, main_file = 'positions_slice.txt'):
+
+    f = open('intersections_triple.txt', 'w', encoding='utf8')
+    
+
+    # pairs_ = pairs(people.keys())
+    triplets_ = triplets(people.keys())
+    user_id_set = getUserIdFromFile(fname = main_file, set_=True)
+    print('user_id_set loaded')
+
+    counter = 0
+    summ = len(triplets_)
+    print('%s triplets to be processed'%summ)
+
+    for p in triplets_:
+        # f_g, s_g = p[0], p[1]
+        f_g, s_g, t_g = p[0], p[1], p[2]
+        # print(f_g, s_g, t_g)
+        f_usrs, s_usrs, t_usrs = set(people[f_g]), set(people[s_g]), set(people[t_g])
         # print(f_usrs, s_usrs)
-        pair_intersection = f_usrs & s_usrs
-        print('%s * %s: %s people'%(f_g, s_g, len(list(pair_intersection))))
+        pair_intersection = f_usrs & s_usrs & t_usrs
+        # print('%s * %s: %s people'%(f_g, s_g, len(list(pair_intersection))))
         main_intersection = pair_intersection & user_id_set
-        print('%s * %s * main: %s people'%(f_g, s_g, len(list(main_intersection))))
+        # print('%s * %s * main: %s people'%(f_g, s_g, len(list(main_intersection))))
+        f.write('%s\t%s\t%s\t%s\t%s\n'%(f_g, s_g, t_g, len(list(pair_intersection)), len(list(main_intersection))))
+        
+        counter += 1
+        # sys.stdout.write('%s pairs out of %s completed'%(counter, len(pairs_)))
+        sys.stdout.write('\r%s triplets out of %s completed - %s%%'%(counter, summ, counter*100/summ))
+        sys.stdout.flush()
+        
+
+    f.close()
         
 
 
 if __name__ == '__main__':
 
-    session = vk.Session(access_token='090f759f96a5275d93064832baa22e672f271ec603ee3b0177d9c113caa58100fd2ed5a8981c60c564554')
-    api = vk.API(session, v='5.62', lang='ru', timeout=10)
+    # session = vk.Session(access_token='090f759f96a5275d93064832baa22e672f271ec603ee3b0177d9c113caa58100fd2ed5a8981c60c564554')
+    # api = vk.API(session, v='5.62', lang='ru', timeout=10)
 
-    # user_id_list = getUserIdFromFile()
-    groups = getGroups(user_id_list, api)
+    # user_id_list = getUserIdFromFile(fname='positions (2).txt')
+    # groups = getGroups(user_id_list, api)
     # groups = restoreDict('groups.txt')
-    people = getUsersFromGroups(groups, api)
-    # people = restoreDict('people.txt')
-    intersections(people)
+    # groups = getGroupsFromFile()
+    # for i in groups:
+    #     print(i)
+    # people = getUsersFromGroups(groups, api)
+    people = restoreDict('people.txt')
+
+    # people = restoreDict('people_sample.txt')
+    intersections(people, main_file = 'positions (2).txt')
+
+            
+
+
     
 
