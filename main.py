@@ -5,4 +5,4 @@
 from main_activities import *
 
 if __name__ == '__main__':
-    main()
+    print(niceDate(1490606279))
